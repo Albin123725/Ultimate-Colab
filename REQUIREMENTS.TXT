@@ -1,0 +1,11 @@
+# Core requirements
+Flask==2.3.3
+gunicorn==21.2.0
+selenium==4.15.2
+undetected-chromedriver==3.5.4
+requests==2.31.0
+psutil==5.9.6
+
+# Optional for notifications
+python-telegram-bot==20.6
+discord-webhook==1.1.0
