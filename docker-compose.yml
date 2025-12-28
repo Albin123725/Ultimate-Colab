@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  colab-bot:
+    build: .
+    container_name: ai-colab-bot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # Prometheus metrics
+    environment:
+      - COLAB_URL=${COLAB_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - REDIS_URL=redis://redis:6379
+      - ENABLE_AI=true
+      - ENABLE_CV=true
+      - MAX_TABS=3
+      - AUTO_START=true
+    volumes:
+      - ./logs:/app/logs
+      - ./screenshots:/app/screenshots
+      - ./models:/app/models
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - colab-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: colab-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - colab-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: colab-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - colab-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: colab-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - colab-network
+    depends_on:
+      - prometheus
+
+  nginx:
+    image: nginx:alpine
+    container_name: colab-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    networks:
+      - colab-network
+    depends_on:
+      - colab-bot
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  colab-network:
+    driver: bridge
