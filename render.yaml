@@ -1,26 +1,84 @@
+
+---
+
+### **2. `render.yaml` - Enhanced Configuration**
+```yaml
 services:
   - type: web
-    name: ultimate-colab-keeper
+    name: ai-colab-supreme-bot
     env: python
     region: oregon
     plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: COLAB_URL
+        value: https://colab.research.google.com/drive/YOUR_NOTEBOOK_ID
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: ENABLE_AI
+        value: true
+      - key: ENABLE_CV
+        value: true
+      - key: MAX_TABS
+        value: "3"
+      - key: SESSION_ROTATION_HOURS
+        value: "11"
+      - key: RENDER
+        value: "true"
+    
     buildCommand: |
-      pip install -r requirements.txt
-      apt-get update && apt-get install -y wget gnupg unzip
-      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+      apt-get update && apt-get install -y \
+        wget gnupg unzip \
+        tesseract-ocr \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev
+        
+      # Install Chrome
+      wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
       echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
       apt-get update && apt-get install -y google-chrome-stable
-      CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3)
-      wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${CHROME_VERSION}/chromedriver_linux64.zip"
+      
+      # Install ChromeDriver
+      CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1)
+      CHROME_DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}")
+      wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${CHROME_DRIVER_VERSION}/chromedriver_linux64.zip"
       unzip /tmp/chromedriver.zip -d /usr/local/bin/
       chmod +x /usr/local/bin/chromedriver
-    startCommand: gunicorn ultimate_colab_keeper:app
-    envVars:
-      - key: COLAB_URL
-        value: https://colab.research.google.com/drive/1jckV8xUJSmLhhol6wZwVJzpybsimiRw1?usp=sharing
-      - key: GOOGLE_EMAIL
-        sync: false
-      - key: GOOGLE_PASSWORD
-        sync: false
-      - key: GOOGLE_CHROME_BIN
-        value: /usr/bin/google-chrome
+      
+      # Python setup
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      
+      # Download AI models
+      python -c "from ai_models import download_models; download_models()"
+    
+    startCommand: |
+      # Start multiple services
+      gunicorn --workers=2 --threads=4 --bind=0.0.0.0:$PORT ai_colab_supreme:app &
+      python telegram_bot.py &
+      python metrics_server.py &
+      wait
+
+  # Optional: Redis for session management
+  - type: redis
+    name: colab-bot-redis
+    ipAllowList: []
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+  # Optional: Cron job for maintenance
+  - type: cron
+    name: bot-maintenance
+    schedule: "0 */6 * * *"  # Every 6 hours
+    buildCommand: pip install -r requirements.txt
+    startCommand: python maintenance.py
