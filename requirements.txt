@@ -1,19 +1,13 @@
 # Core
 Flask==3.0.0
-Flask-SocketIO==5.3.6
+gunicorn==21.2.0
 prometheus_client==0.19.0
 psutil==5.9.6
 
 # Browser Automation
 selenium==4.15.2
-undetected-chromedriver==3.5.5
 
-# Optional AI Dependencies
+# Optional AI (comment out if not needed)
 # numpy==1.26.2
 # opencv-python==4.8.1.78
-# Pillow==10.1.0
-# pytesseract==0.3.10
-# ultralytics==8.0.196
 # openai==1.3.5
-# scikit-learn==1.3.2
-# pandas==2.1.4
