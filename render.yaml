@@ -1,28 +1,27 @@
 services:
   - type: web
-    name: aggressive-colab-keeper
+    name: colab-ultimate-survival
     env: python
     region: oregon
     plan: free
     autoDeploy: true
     
     buildCommand: |
-      # Install Chrome
+      # Install system dependencies
       apt-get update
-      apt-get install -y wget gnupg unzip curl
-      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
-      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb stable main" >> /etc/apt/sources.list.d/google.list
+      apt-get install -y wget gnupg unzip curl xvfb
+      
+      # Install Chrome
+      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome.gpg
+      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb stable main" > /etc/apt/sources.list.d/google-chrome.list
       apt-get update
       apt-get install -y google-chrome-stable --no-install-recommends
       
-      # Install Python dependencies
+      # Python dependencies
       pip install --upgrade pip
       pip install -r requirements.txt
-      
-      # Install ChromeDriver via webdriver-manager
-      python -c "from webdriver_manager.chrome import ChromeDriverManager; ChromeDriverManager().install()"
     
-    startCommand: python colab_aggressive_keeper.py
+    startCommand: python colab_ultimate_survival.py
     
     healthCheckPath: /health
     healthCheckTimeout: 30
@@ -33,4 +32,4 @@ services:
       - key: RENDER
         value: true
       - key: COLAB_URL
-        sync: false  # ← SET THIS IN RENDER DASHBOARD!
+        sync: false  # ← SET THIS!
