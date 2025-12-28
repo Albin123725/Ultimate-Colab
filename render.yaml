@@ -1,8 +1,16 @@
-# render.yaml
 services:
   - type: web
-    name: ai-colab-bot
+    name: ai-colab-supreme
     env: python
+    region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python ai_colab_supreme_final.py
+    healthCheckPath: /health
+    envVars:
+      - key: COLAB_URL
+        value: https://colab.research.google.com/drive/YOUR_NOTEBOOK_ID
+      - key: RENDER
+        value: true
+      - key: AUTO_START
+        value: true
+      - key: HEADLESS
+        value: true
