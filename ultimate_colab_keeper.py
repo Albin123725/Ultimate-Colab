@@ -1,129 +1,89 @@
 #!/usr/bin/env python3
 """
-🚀 ULTIMATE 24/7 COLAB KEEPER v8.0 - AGGRESSIVE RECOVERY
-✅ More aggressive reconnection attempts
-✅ Multiple fallback strategies
-✅ Better error handling
-✅ Faster recovery from disconnects
+🚀 REAL COLAB KEEPER - ACTUALLY CLICKS & RUNS
+✅ Actually clicks Connect button
+✅ Actually runs cells
+✅ Actually keeps Colab online
 """
 
 import os
 import time
 import logging
 import threading
-import random
 from datetime import datetime
 from flask import Flask, jsonify, render_template_string
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import WebDriverException
+import requests
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class AggressiveColabKeeper:
-    """Aggressive Colab keeper that never gives up"""
-    
+class RealColabKeeper:
     def __init__(self):
         self.is_running = False
         self.driver = None
-        self.colab_url = os.getenv("COLAB_URL", "https://colab.research.google.com/drive/1jckV8xUJSmLhhol6wZwVJzpybsimiRw1?usp=sharing")
+        
+        # Your Colab URL
+        self.colab_url = "https://colab.research.google.com/drive/1jckV8xUJSmLhhol6wZwVJzpybsimiRw1?usp=sharing"
+        
+        # Stats
+        self.actions = 0
+        self.connects = 0
+        self.cells_run = 0
         self.session_start = datetime.now()
         
-        # Aggressive reconnection settings
-        self.max_reconnect_attempts = 10
-        self.reconnect_delay = 10  # seconds between attempts
-        self.reconnect_strategies = [
-            self.reconnect_strategy_1,  # Direct connect button
-            self.reconnect_strategy_2,  # Runtime menu
-            self.reconnect_strategy_3,  # JavaScript injection
-            self.reconnect_strategy_4,  # Refresh and retry
-            self.reconnect_strategy_5,  # New tab approach
-        ]
-        
-        # Statistics
-        self.stats = {
-            "status": "stopped",
-            "last_check": None,
-            "reconnects": 0,
-            "total_checks": 0,
-            "successful_checks": 0,
-            "session_start": self.session_start
-        }
+        logger.info(f"🤖 REAL Colab Keeper for: {self.colab_url}")
     
     def setup_browser(self):
-        """Setup browser quickly"""
+        """Setup Chrome to actually interact"""
         try:
             options = Options()
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--headless=new")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
             
+            # Remove for debugging, but needed for Render
             if os.getenv("RENDER"):
                 options.add_argument("--headless=new")
             
+            # Essential for clicking
+            options.add_argument("--window-size=1920,1080")
+            
             self.driver = webdriver.Chrome(options=options)
-            logger.info("✅ Browser ready")
+            logger.info("✅ Browser ready for clicking")
             return True
         except Exception as e:
             logger.error(f"❌ Browser setup failed: {e}")
             return False
     
-    def is_colab_connected(self):
-        """Check if Colab shows as connected"""
+    def actually_click_connect(self):
+        """ACTUALLY click the Connect button"""
         try:
-            if not self.driver:
-                return False
+            logger.info("🖱️ Looking for Connect button to ACTUALLY click...")
             
-            page_source = self.driver.page_source.lower()
+            # Strategy 1: Find by visible text
+            buttons = self.driver.find_elements(By.TAG_NAME, "button")
+            for btn in buttons:
+                try:
+                    text = btn.text
+                    if text and ("Connect" in text or "RECONNECT" in text):
+                        if btn.is_displayed():
+                            btn.click()
+                            logger.info(f"✅ ACTUALLY clicked: {text}")
+                            self.connects += 1
+                            time.sleep(5)
+                            return True
+                except:
+                    continue
             
-            # Check for connected indicators
-            connected_indicators = [
-                "connected",
-                "runtime connected",
-                "gpu",
-                "tpu",
-                "allocated"
-            ]
-            
-            # Check for disconnected indicators
-            disconnected_indicators = [
-                "disconnected",
-                "connect to",
-                "not connected",
-                "runtime disconnected"
-            ]
-            
-            # Check page
-            has_disconnected = any(indicator in page_source for indicator in disconnected_indicators)
-            has_connected = any(indicator in page_source for indicator in connected_indicators)
-            
-            if has_disconnected and not has_connected:
-                logger.warning("⚠️ Colab shows as DISCONNECTED")
-                return False
-            else:
-                logger.info("✅ Colab appears CONNECTED")
-                return True
-                
-        except Exception as e:
-            logger.error(f"❌ Connection check error: {e}")
-            return False
-    
-    def reconnect_strategy_1(self):
-        """Strategy 1: Direct Connect button click"""
-        try:
-            logger.info("🔄 Strategy 1: Clicking Connect button")
-            
-            # Try multiple selectors
+            # Strategy 2: Find by selector
             selectors = [
                 'colab-connect-button',
                 '[aria-label*="Connect"]',
-                'paper-button',
-                'button'
+                'paper-button'
             ]
             
             for selector in selectors:
@@ -131,257 +91,173 @@ class AggressiveColabKeeper:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     for elem in elements:
                         if elem.is_displayed():
-                            text = elem.text.lower() if elem.text else ""
-                            if "connect" in text or "reconnect" in text:
-                                elem.click()
-                                logger.info(f"✅ Clicked: {text[:20]}")
-                                time.sleep(5)
-                                return True
-                except:
-                    continue
-            
-            return False
-        except Exception as e:
-            logger.error(f"❌ Strategy 1 failed: {e}")
-            return False
-    
-    def reconnect_strategy_2(self):
-        """Strategy 2: Runtime menu approach"""
-        try:
-            logger.info("🔄 Strategy 2: Runtime menu")
-            
-            # Try to open runtime menu
-            runtime_selectors = [
-                '[aria-label*="Runtime"]',
-                '[aria-label*="runtime"]',
-                '[title*="Runtime"]'
-            ]
-            
-            for selector in runtime_selectors:
-                try:
-                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for elem in elements:
-                        if elem.is_displayed():
                             elem.click()
-                            time.sleep(1)
-                            
-                            # Look for connect in dropdown
-                            connect_options = self.driver.find_elements(By.CSS_SELECTOR, '[command*="connect"], [aria-label*="Connect"]')
-                            for opt in connect_options:
-                                if opt.is_displayed():
-                                    opt.click()
-                                    logger.info("✅ Selected connect from menu")
-                                    time.sleep(5)
-                                    return True
+                            logger.info(f"✅ ACTUALLY clicked using selector: {selector}")
+                            self.connects += 1
+                            time.sleep(5)
+                            return True
                 except:
                     continue
             
+            # Strategy 3: JavaScript click
+            js = """
+            var clicked = false;
+            var buttons = document.querySelectorAll('button, colab-connect-button, paper-button');
+            buttons.forEach(btn => {
+                var text = btn.textContent || '';
+                if (text.includes('Connect') || text.includes('RECONNECT')) {
+                    btn.click();
+                    console.log('🤖 JavaScript ACTUALLY clicked Connect');
+                    clicked = true;
+                }
+            });
+            return clicked;
+            """
+            
+            result = self.driver.execute_script(js)
+            if result:
+                logger.info("✅ JavaScript ACTUALLY clicked Connect")
+                self.connects += 1
+                time.sleep(5)
+                return True
+            
+            logger.warning("⚠️ Could not find Connect button")
             return False
+            
         except Exception as e:
-            logger.error(f"❌ Strategy 2 failed: {e}")
+            logger.error(f"❌ Click error: {e}")
             return False
     
-    def reconnect_strategy_3(self):
-        """Strategy 3: JavaScript injection"""
+    def actually_run_cells(self):
+        """ACTUALLY run cells with Ctrl+F9"""
         try:
-            logger.info("🔄 Strategy 3: JavaScript injection")
+            logger.info("▶️ Trying to ACTUALLY run cells...")
             
-            js_code = """
-            // Aggressive connect script
-            function aggressiveConnect() {
-                console.log("🤖 Aggressive connect attempt");
+            # Press Ctrl+F9 to run all
+            actions = ActionChains(self.driver)
+            actions.key_down(Keys.CONTROL).send_keys(Keys.F9).key_up(Keys.CONTROL).perform()
+            
+            logger.info("✅ Sent Ctrl+F9 to ACTUALLY run cells")
+            self.cells_run += 1
+            time.sleep(5)
+            return True
+        except Exception as e:
+            logger.error(f"❌ Run cells error: {e}")
+            return False
+    
+    def inject_keepalive_script(self):
+        """Inject JavaScript to keep Colab alive"""
+        try:
+            js = """
+            // REAL keep-alive script
+            function realKeepAlive() {
+                console.log("🔄 REAL Keep-Alive: " + new Date().toLocaleTimeString());
                 
-                // Try all button types
-                const buttons = document.querySelectorAll('button, paper-button, colab-connect-button');
-                let clicked = false;
-                
+                // Find and click Connect
+                var buttons = document.querySelectorAll('colab-connect-button, button, paper-button');
                 buttons.forEach(btn => {
-                    const text = btn.textContent || btn.innerText || '';
-                    if (text.match(/Connect|RECONNECT|Runtime/i) && !clicked) {
+                    var text = btn.textContent || '';
+                    if (text.includes('Connect') || text.includes('RECONNECT')) {
                         btn.click();
-                        console.log("✅ JavaScript clicked: " + text.substring(0, 20));
-                        clicked = true;
+                        console.log('✅ Injected script clicked Connect');
                     }
                 });
                 
-                return clicked;
+                // Also click in output area
+                var outputs = document.querySelectorAll('.output');
+                if (outputs.length > 0) {
+                    outputs[0].click();
+                }
             }
             
-            return aggressiveConnect();
+            // Run every 80 seconds
+            setInterval(realKeepAlive, 80000);
+            realKeepAlive(); // Run now
+            console.log("🎉 REAL keep-alive injected");
             """
             
-            result = self.driver.execute_script(js_code)
-            time.sleep(3)
-            
-            if result:
-                logger.info("✅ JavaScript connect successful")
-                return True
-            
-            return False
+            self.driver.execute_script(js)
+            logger.info("✅ Injected REAL keep-alive script")
+            return True
         except Exception as e:
-            logger.error(f"❌ Strategy 3 failed: {e}")
+            logger.error(f"❌ Script injection error: {e}")
             return False
     
-    def reconnect_strategy_4(self):
-        """Strategy 4: Refresh and retry"""
+    def perform_real_actions(self):
+        """Perform ACTUAL actions to keep Colab alive"""
         try:
-            logger.info("🔄 Strategy 4: Page refresh")
+            self.actions += 1
+            logger.info(f"🎯 REAL Action #{self.actions}")
             
+            # 1. Click Connect if needed
+            self.actually_click_connect()
+            
+            # 2. Run cells
+            self.actually_run_cells()
+            
+            # 3. Inject keep-alive
+            self.inject_keepalive_script()
+            
+            # 4. Simple refresh
             self.driver.refresh()
-            time.sleep(8)  # Wait longer for page load
+            time.sleep(5)
             
-            # Try strategy 1 after refresh
-            if self.reconnect_strategy_1():
-                return True
+            logger.info(f"✅ Completed REAL action #{self.actions}")
+            return True
             
-            return False
         except Exception as e:
-            logger.error(f"❌ Strategy 4 failed: {e}")
+            logger.error(f"❌ Action error: {e}")
             return False
     
-    def reconnect_strategy_5(self):
-        """Strategy 5: New tab approach"""
-        try:
-            logger.info("🔄 Strategy 5: New tab approach")
-            
-            # Open in new tab
-            self.driver.execute_script("window.open('');")
-            time.sleep(1)
-            
-            # Switch to new tab
-            self.driver.switch_to.window(self.driver.window_handles[-1])
-            
-            # Load Colab
-            self.driver.get(self.colab_url)
-            time.sleep(8)
-            
-            # Try to connect
-            if self.reconnect_strategy_1():
-                return True
-            
-            return False
-        except Exception as e:
-            logger.error(f"❌ Strategy 5 failed: {e}")
-            return False
-    
-    def aggressive_reconnect(self):
-        """Try ALL strategies until connected"""
-        logger.warning("🚨 INITIATING AGGRESSIVE RECONNECTION")
-        
-        attempts = 0
-        max_attempts = self.max_reconnect_attempts
-        
-        while attempts < max_attempts and self.is_running:
-            attempts += 1
-            logger.info(f"🔄 Reconnection attempt {attempts}/{max_attempts}")
-            
-            # Try each strategy
-            for strategy_num, strategy in enumerate(self.reconnect_strategies, 1):
-                try:
-                    logger.info(f"  Trying Strategy {strategy_num}")
-                    if strategy():
-                        # Check if now connected
-                        time.sleep(3)
-                        if self.is_colab_connected():
-                            self.stats["reconnects"] += 1
-                            logger.info(f"🎉 RECONNECTION SUCCESSFUL after {attempts} attempts")
-                            return True
-                except Exception as e:
-                    logger.error(f"  Strategy {strategy_num} error: {e}")
-            
-            # Wait before next attempt
-            if attempts < max_attempts:
-                wait_time = self.reconnect_delay * attempts  # Exponential backoff
-                logger.info(f"⏳ Waiting {wait_time}s before next attempt...")
-                time.sleep(wait_time)
-        
-        logger.error(f"❌ FAILED to reconnect after {max_attempts} attempts")
-        return False
-    
-    def keep_alive_cycle(self):
-        """One keep-alive cycle"""
-        try:
-            self.stats["total_checks"] += 1
-            
-            # Check connection
-            if self.is_colab_connected():
-                self.stats["successful_checks"] += 1
-                self.stats["last_check"] = datetime.now()
-                logger.info(f"✅ Check #{self.stats['total_checks']}: Connected")
-                return True
-            else:
-                logger.warning(f"⚠️ Check #{self.stats['total_checks']}: Disconnected - Attempting reconnect")
-                
-                # Try aggressive reconnection
-                if self.aggressive_reconnect():
-                    self.stats["successful_checks"] += 1
-                    return True
-                else:
-                    logger.error("❌ Reconnection failed")
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"❌ Keep-alive cycle error: {e}")
-            return False
-    
-    def keeper_loop(self):
-        """Main loop"""
-        logger.info("🚀 Starting Aggressive Colab Keeper")
-        self.stats["status"] = "running"
+    def keep_alive_loop(self):
+        """Main loop with REAL actions"""
+        logger.info("🚀 Starting REAL keeper loop")
         
         # Setup browser
         if not self.driver:
             if not self.setup_browser():
+                logger.error("❌ Failed to setup browser")
                 return
         
-        # Navigate to Colab
+        # Load Colab
         try:
-            logger.info(f"🌐 Loading: {self.colab_url}")
+            logger.info(f"🌐 Loading Colab...")
             self.driver.get(self.colab_url)
             time.sleep(10)
+            logger.info("✅ Colab loaded")
         except Exception as e:
             logger.error(f"❌ Failed to load Colab: {e}")
             return
         
-        cycle_count = 0
-        
         while self.is_running:
             try:
-                cycle_count += 1
-                logger.info(f"🔄 Cycle #{cycle_count}")
+                # Perform REAL actions
+                self.perform_real_actions()
                 
-                # Perform keep-alive
-                success = self.keep_alive_cycle()
-                
-                # Calculate wait time
-                if success:
-                    wait_time = random.randint(150, 210)  # 2.5-3.5 minutes
-                else:
-                    wait_time = random.randint(30, 60)  # 30-60 seconds if failed
-                
-                logger.info(f"⏳ Next check in {wait_time}s")
+                # Wait 2.5 minutes
+                wait_time = 150
+                logger.info(f"⏳ Next REAL action in {wait_time//60} minutes")
                 time.sleep(wait_time)
                 
             except Exception as e:
-                logger.error(f"❌ Main loop error: {e}")
+                logger.error(f"❌ Loop error: {e}")
                 time.sleep(60)
     
     def start(self):
-        """Start the keeper"""
+        """Start the REAL keeper"""
         if self.is_running:
             return False
         
         self.is_running = True
-        thread = threading.Thread(target=self.keeper_loop, daemon=True)
+        thread = threading.Thread(target=self.keep_alive_loop, daemon=True)
         thread.start()
         
-        logger.info("✅ Aggressive keeper started")
-        self.stats["status"] = "running"
+        logger.info("✅ REAL keeper started")
         return True
     
     def stop(self):
         """Stop the keeper"""
-        logger.info("🛑 Stopping keeper...")
+        logger.info("🛑 Stopping REAL keeper")
         self.is_running = False
         
         if self.driver:
@@ -390,106 +266,108 @@ class AggressiveColabKeeper:
             except:
                 pass
         
-        self.stats["status"] = "stopped"
         return True
 
-# Simple Flask app
+# Flask app
 app = Flask(__name__)
-bot = AggressiveColabKeeper()
+bot = RealColabKeeper()
 
 @app.route('/')
 def dashboard():
-    return '''
+    session_age = datetime.now() - bot.session_start
+    minutes = int(session_age.total_seconds() / 60)
+    
+    html = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>🤖 Aggressive Colab Keeper</title>
+        <title>🤖 REAL Colab Keeper</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background: #0f172a; color: white; }
-            .container { max-width: 800px; margin: 0 auto; }
-            .header { background: #3b82f6; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-            .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-            .btn { background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
-            .btn-stop { background: #ef4444; }
+            body {{ font-family: Arial; padding: 20px; background: #0f172a; color: white; }}
+            .status {{ font-size: 1.5em; margin: 20px 0; }}
+            .stats {{ background: #1e293b; padding: 15px; border-radius: 10px; margin: 10px 0; }}
+            .btn {{ background: #10b981; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; }}
+            .btn-stop {{ background: #ef4444; }}
         </style>
         <script>
-            function updateStatus() {
+            function update() {{
                 fetch('/api/status')
                     .then(r => r.json())
-                    .then(data => {
+                    .then(data => {{
                         document.getElementById('status').innerHTML = 
-                            data.status === 'running' ? '🟢 RUNNING' : '🔴 STOPPED';
-                        document.getElementById('reconnects').textContent = data.reconnects || 0;
-                        document.getElementById('totalChecks').textContent = data.total_checks || 0;
-                        document.getElementById('successRate').textContent = 
-                            data.total_checks > 0 ? 
-                            Math.round((data.successful_checks / data.total_checks) * 100) + '%' : '0%';
-                    });
-            }
-            function control(action) {
-                fetch('/api/' + action)
-                    .then(r => r.json())
-                    .then(data => {
-                        alert(data.message);
-                        updateStatus();
-                    });
-            }
-            function forceReconnect() {
-                fetch('/api/force-reconnect')
-                    .then(r => r.json())
-                    .then(data => {
-                        alert(data.message);
-                        updateStatus();
-                    });
-            }
-            setInterval(updateStatus, 5000);
-            window.onload = updateStatus;
+                            data.running ? '🟢 REAL KEEPER RUNNING' : '🔴 STOPPED';
+                        document.getElementById('actions').textContent = data.actions;
+                        document.getElementById('connects').textContent = data.connects;
+                        document.getElementById('cells').textContent = data.cells_run;
+                        document.getElementById('time').textContent = data.session_age;
+                    }});
+            }}
+            setInterval(update, 5000);
+            window.onload = update;
         </script>
     </head>
     <body>
-        <div class="container">
-            <div class="header"><h1>🤖 Aggressive Colab Keeper</h1></div>
-            <div class="card">
-                <h2>Status: <span id="status">Loading...</span></h2>
-                <p>Reconnects: <span id="reconnects">0</span></p>
-                <p>Total Checks: <span id="totalChecks">0</span></p>
-                <p>Success Rate: <span id="successRate">0%</span></p>
-            </div>
-            <div class="card">
-                <h2>Controls</h2>
-                <button class="btn" onclick="control('start')">🚀 Start</button>
-                <button class="btn btn-stop" onclick="control('stop')">⏹️ Stop</button>
-                <button class="btn" onclick="forceReconnect()">🔌 Force Reconnect</button>
-                <button class="btn" onclick="updateStatus()">🔄 Refresh</button>
-            </div>
+        <h1>🤖 REAL Colab Keeper</h1>
+        <p>Actually clicks buttons & runs cells</p>
+        
+        <div class="stats">
+            <div class="status" id="status">Loading...</div>
+            <p>Real Actions: <strong id="actions">0</strong></p>
+            <p>Connect Clicks: <strong id="connects">0</strong></p>
+            <p>Cells Run: <strong id="cells">0</strong></p>
+            <p>Session: <strong id="time">0m</strong></p>
+        </div>
+        
+        <div>
+            <button class="btn" onclick="window.location.href='/start'">▶️ Start REAL Keeper</button>
+            <button class="btn btn-stop" onclick="window.location.href='/stop'">⏹️ Stop</button>
+            <button class="btn" onclick="window.location.href='{bot.colab_url}'" target="_blank">📓 Open Colab</button>
+        </div>
+        
+        <div style="margin-top: 30px; background: #334155; padding: 15px; border-radius: 10px;">
+            <h3>🎯 What this bot ACTUALLY does:</h3>
+            <ul>
+                <li>✅ Actually clicks Connect button</li>
+                <li>✅ Actually runs cells (Ctrl+F9)</li>
+                <li>✅ Actually injects keep-alive script</li>
+                <li>✅ Actually refreshes page</li>
+                <li>✅ Every 2.5 minutes</li>
+            </ul>
         </div>
     </body>
     </html>
-    '''
+    """
+    return html
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy", "running": bot.is_running})
 
 @app.route('/api/status')
 def api_status():
-    return jsonify(bot.stats)
+    session_age = datetime.now() - bot.session_start
+    minutes = int(session_age.total_seconds() / 60)
+    
+    return jsonify({
+        "running": bot.is_running,
+        "actions": bot.actions,
+        "connects": bot.connects,
+        "cells_run": bot.cells_run,
+        "session_age": f"{minutes}m"
+    })
 
-@app.route('/api/start')
-def api_start():
-    if bot.is_running:
-        return jsonify({"message": "Already running"})
+@app.route('/start')
+def start():
     bot.start()
-    return jsonify({"message": "Started"})
+    return "✅ REAL keeper started. <a href='/'>Back to dashboard</a>"
 
-@app.route('/api/stop')
-def api_stop():
-    if not bot.is_running:
-        return jsonify({"message": "Not running"})
+@app.route('/stop')
+def stop():
     bot.stop()
-    return jsonify({"message": "Stopped"})
-
-@app.route('/api/force-reconnect')
-def force_reconnect():
-    return jsonify({"message": "Reconnection triggered"})
+    return "🛑 REAL keeper stopped. <a href='/'>Back to dashboard</a>"
 
 if __name__ == "__main__":
+    # Auto-start on Render
     if os.getenv("RENDER"):
         bot.start()
         app.run(host='0.0.0.0', port=int(os.getenv("PORT", 10000)))
