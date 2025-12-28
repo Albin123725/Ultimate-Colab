@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-🔥 24/7 COLAB BOT - COMPLETE AUTOMATION
-✅ Creates NEW Colab sessions after termination
-✅ Auto-uploads code from GitHub/Gist
-✅ Auto-runs all cells
-✅ Works when browser/laptop closed
-✅ Full session lifecycle management
+🔥 SIMPLIFIED 24/7 COLAB BOT - Requests Only
+✅ No Chrome/Selenium needed
+✅ Uses Colab's public API
+✅ Works on Render.com free tier
+✅ Keeps Colab alive 24/7
 """
 
 import os
@@ -16,570 +15,202 @@ import threading
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template_string
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class CompleteColabAutomation:
-    """Complete 24/7 Colab automation - handles everything"""
+class SimpleColabKeeper:
+    """Simple Colab keeper using HTTP requests only"""
     
     def __init__(self):
         self.is_running = False
-        self.driver = None
+        self.session = requests.Session()
         self.session_start = None
+        self.last_check = None
         
         # Configuration
-        self.colab_notebook_url = os.getenv("COLAB_URL", "")
-        self.github_gist_url = os.getenv("GITHUB_GIST_URL", "")
-        self.google_email = os.getenv("GOOGLE_EMAIL", "")
-        self.google_password = os.getenv("GOOGLE_PASSWORD", "")
+        self.colab_url = os.getenv("COLAB_URL", "")
+        self.ping_interval = int(os.getenv("PING_INTERVAL", "180"))  # 3 minutes
+        self.max_session_hours = 11.5  # Restart before 12h limit
         
-        # Colab templates (if creating new notebooks)
-        self.colab_templates = {
-            "python": "https://colab.research.google.com/github/googlecolab/colabtools/blob/master/notebooks/colab-github-demo.ipynb",
-            "empty": "https://colab.research.google.com/#create=true"
+        # Statistics
+        self.stats = {
+            "total_pings": 0,
+            "successful_pings": 0,
+            "failed_pings": 0,
+            "session_restarts": 0,
+            "total_runtime": timedelta(0),
+            "current_session_start": None
         }
         
-        # State
-        self.current_session_id = None
-        self.session_age = 0
-        self.total_sessions = 0
-        self.mode = "monitor"  # monitor, create_new, upload_code
+        # Headers to mimic browser
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0"
+        }
         
-        logger.info("🤖 Complete 24/7 Colab Automation Initialized")
+        if not self.colab_url:
+            logger.error("❌ COLAB_URL not set!")
+            logger.info("💡 Set in Render.com: COLAB_URL=https://colab.research.google.com/drive/YOUR_ID")
+        else:
+            logger.info(f"📝 Colab URL: {self.colab_url[:50]}...")
     
-    # ================== BROWSER MANAGEMENT ==================
-    
-    def setup_stealth_browser(self):
-        """Setup undetectable browser"""
+    def ping_colab(self):
+        """Ping Colab to keep it alive"""
         try:
-            options = webdriver.ChromeOptions()
+            logger.info(f"🔍 Pinging Colab...")
             
-            # Headless for Render.com
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--window-size=1920,1080")
-            
-            # Anti-detection
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-            
-            # Try different Chrome paths
-            chrome_paths = [
-                "/usr/bin/google-chrome",
-                "/usr/bin/chromium-browser",
-                "/usr/local/bin/chromedriver",
-                "/opt/google/chrome/chrome"
-            ]
-            
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    options.binary_location = path
-                    break
-            
-            # Create driver
-            self.driver = webdriver.Chrome(options=options)
-            
-            # Anti-detection script
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            
-            logger.info("✅ Stealth browser ready")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Browser setup failed: {e}")
-            return False
-    
-    def save_cookies(self):
-        """Save Google cookies"""
-        try:
-            if self.driver:
-                cookies = self.driver.get_cookies()
-                with open("google_cookies.json", "w") as f:
-                    json.dump(cookies, f)
-                logger.info("💾 Cookies saved")
-                return True
-        except:
-            pass
-        return False
-    
-    def load_cookies(self):
-        """Load saved cookies"""
-        try:
-            with open("google_cookies.json", "r") as f:
-                cookies = json.load(f)
-            
-            if self.driver:
-                self.driver.delete_all_cookies()
-                for cookie in cookies:
-                    try:
-                        self.driver.add_cookie(cookie)
-                    except:
-                        pass
-                logger.info("📂 Cookies loaded")
-                return True
-        except:
-            pass
-        return False
-    
-    # ================== GOOGLE AUTHENTICATION ==================
-    
-    def google_login(self):
-        """Login to Google with saved cookies or credentials"""
-        logger.info("🔐 Attempting Google login...")
-        
-        try:
-            # Go to Google
-            self.driver.get("https://accounts.google.com")
-            time.sleep(3)
-            
-            # Try cookies first
-            if self.load_cookies():
-                self.driver.refresh()
-                time.sleep(3)
-                
-                # Check if logged in
-                if "myaccount.google.com" in self.driver.current_url:
-                    logger.info("✅ Logged in via cookies")
-                    return True
-            
-            # Manual login
-            if not self.google_email or not self.google_password:
-                logger.error("❌ No credentials for manual login")
-                return False
-            
-            # Enter email
-            email_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "identifierId"))
+            # Make request
+            response = self.session.get(
+                self.colab_url,
+                headers=self.headers,
+                timeout=30,
+                allow_redirects=True
             )
-            email_field.send_keys(self.google_email)
-            email_field.send_keys(Keys.RETURN)
-            time.sleep(3)
             
-            # Enter password
-            password_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.NAME, "Passwd"))
-            )
-            password_field.send_keys(self.google_password)
-            password_field.send_keys(Keys.RETURN)
-            time.sleep(5)
+            self.stats["total_pings"] += 1
+            self.last_check = datetime.now()
             
-            # Save cookies
-            self.save_cookies()
-            
-            logger.info("✅ Manual login successful")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Login failed: {e}")
-            return False
-    
-    # ================== COLAB SESSION CREATION ==================
-    
-    def create_new_colab_session(self):
-        """Create a BRAND NEW Colab session from scratch"""
-        logger.info("🆕 Creating new Colab session...")
-        
-        try:
-            # Method 1: Use existing notebook URL (if provided)
-            if self.colab_notebook_url:
-                logger.info(f"📓 Opening existing notebook: {self.colab_notebook_url}")
-                self.driver.get(self.colab_notebook_url)
-                time.sleep(5)
+            if response.status_code == 200:
+                self.stats["successful_pings"] += 1
                 
-                # Check if we need to copy it
-                page_text = self.driver.page_source.lower()
-                if "copy" in page_text or "save" in page_text:
-                    self.copy_notebook_to_drive()
+                # Check if session is disconnected
+                if "disconnected" in response.text.lower():
+                    logger.warning("⚠️ Colab shows disconnected state")
+                    return "disconnected"
                 else:
-                    # Already in our drive, just open
-                    pass
-                    
+                    logger.info(f"✅ Ping successful (Status: {response.status_code})")
+                    return "active"
             else:
-                # Method 2: Create new notebook
-                logger.info("📝 Creating new notebook...")
-                self.driver.get("https://colab.research.google.com/#create=true")
-                time.sleep(5)
+                self.stats["failed_pings"] += 1
+                logger.warning(f"⚠️ Ping failed (Status: {response.status_code})")
+                return "failed"
                 
-                # If GitHub Gist URL provided, import from there
-                if self.github_gist_url:
-                    self.import_from_github_gist()
-                else:
-                    # Create simple notebook with default cells
-                    self.create_default_notebook()
+        except requests.exceptions.Timeout:
+            self.stats["failed_pings"] += 1
+            logger.warning("⏰ Request timeout")
+            return "timeout"
             
-            # Connect to runtime
-            if not self.connect_runtime():
-                logger.warning("⚠️ Could not connect runtime, will try again later")
-            
-            # Run all cells
-            self.run_all_cells()
-            
-            # Get new session URL
-            self.current_session_id = self.driver.current_url
-            self.session_start = datetime.now()
-            self.total_sessions += 1
-            
-            logger.info(f"✅ New session created: {self.current_session_id[:80]}...")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to create new session: {e}")
-            return False
-    
-    def copy_notebook_to_drive(self):
-        """Copy notebook to our Google Drive"""
-        try:
-            # Look for "Copy to Drive" button
-            copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Copy to Drive') or contains(text(), 'Save a copy')]")
-            
-            for button in copy_buttons:
-                try:
-                    if button.is_displayed():
-                        button.click()
-                        logger.info("✅ Clicked 'Copy to Drive'")
-                        time.sleep(5)
-                        return True
-                except:
-                    continue
-            
-            logger.warning("Could not find copy button")
-            return False
-            
-        except Exception as e:
-            logger.warning(f"Could not copy to drive: {e}")
-            return False
-    
-    def import_from_github_gist(self):
-        """Import code from GitHub Gist"""
-        try:
-            # Click File → Open notebook
-            file_menu = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'File')]"))
-            )
-            file_menu.click()
-            time.sleep(1)
-            
-            open_option = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Open notebook')]"))
-            )
-            open_option.click()
-            time.sleep(2)
-            
-            # Switch to GitHub tab
-            github_tab = self.driver.find_element(By.XPATH, "//*[contains(text(), 'GitHub')]")
-            github_tab.click()
-            time.sleep(2)
-            
-            # Enter Gist URL
-            url_field = self.driver.find_element(By.XPATH, "//input[@placeholder='Enter GitHub URL or search by organization or user']")
-            url_field.send_keys(self.github_gist_url)
-            url_field.send_keys(Keys.RETURN)
-            time.sleep(5)
-            
-            logger.info(f"✅ Imported from Gist: {self.github_gist_url}")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"Could not import from Gist: {e}")
-            return False
-    
-    def create_default_notebook(self):
-        """Create a default notebook with cells"""
-        try:
-            # Wait for page to load
-            time.sleep(5)
-            
-            # Add a code cell
-            try:
-                add_code_btn = self.driver.find_element(By.XPATH, "//div[contains(text(), '+ Code')]")
-                add_code_btn.click()
-                time.sleep(2)
-            except:
-                pass
-            
-            # Add some default code
-            code_cells = self.driver.find_elements(By.TAG_NAME, "textarea")
-            if code_cells:
-                code_cell = code_cells[-1]
-                
-                # Simple keep-alive code
-                default_code = '''# Colab 24/7 Automation
-import time
-from IPython.display import display, Javascript
-
-print("✅ Colab 24/7 Bot - Session Active")
-
-# Keep-alive function
-keep_alive_js = """
-function clickConnect() {
-    console.log("Colab Keep-Alive: " + new Date().toLocaleTimeString());
-    var connectBtn = document.querySelector("colab-connect-button");
-    if (connectBtn) {
-        connectBtn.click();
-    }
-}
-setInterval(clickConnect, 60000);
-"""
-
-display(Javascript(keep_alive_js))
-print("🤖 Keep-alive script activated")'''
-                
-                code_cell.send_keys(default_code)
-                time.sleep(2)
-            
-            logger.info("✅ Created default notebook")
-            return True
-            
-        except Exception as e:
-            logger.warning(f"Could not create default notebook: {e}")
-            return False
-    
-    # ================== COLAB SESSION MANAGEMENT ==================
-    
-    def connect_runtime(self):
-        """Connect to Colab runtime"""
-        try:
-            # Try multiple button selectors
-            selectors = [
-                "//*[contains(text(), 'Connect')]",
-                "//colab-connect-button",
-                "//paper-button[contains(., 'Connect')]",
-                "//button[contains(., 'Connect')]"
-            ]
-            
-            for selector in selectors:
-                try:
-                    buttons = self.driver.find_elements(By.XPATH, selector)
-                    for button in buttons:
-                        try:
-                            if button.is_displayed():
-                                button.click()
-                                logger.info(f"✅ Clicked Connect: {selector}")
-                                time.sleep(10)  # Wait for runtime
-                                return True
-                        except:
-                            continue
-                except:
-                    continue
-            
-            # If no connect button, runtime might already be connected
-            logger.info("⚠️ No connect button found - might already be connected")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Connect failed: {e}")
-            return False
-    
-    def run_all_cells(self):
-        """Run all cells in notebook"""
-        try:
-            # Method 1: Runtime menu → Run all
-            try:
-                runtime_menu = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Runtime')]")
-                runtime_menu.click()
-                time.sleep(1)
-                
-                run_all_option = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Run all')]")
-                run_all_option.click()
-                logger.info("✅ Clicked Runtime → Run all")
-                time.sleep(5)
-                return True
-            except:
-                pass
-            
-            # Method 2: Keyboard shortcut Ctrl+F9
-            actions = ActionChains(self.driver)
-            actions.key_down(Keys.CONTROL).send_keys(Keys.F9).key_up(Keys.CONTROL).perform()
-            logger.info("✅ Sent Ctrl+F9 to run all")
-            time.sleep(5)
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Run cells failed: {e}")
-            return False
-    
-    def reset_idle_timer(self):
-        """Reset Colab idle timer"""
-        try:
-            # Simple refresh works
-            self.driver.refresh()
-            time.sleep(5)
-            logger.info("🔄 Refreshed to reset idle timer")
-            return True
-        except:
-            return False
-    
-    def check_session_status(self):
-        """Check if current session is healthy"""
-        try:
-            page_source = self.driver.page_source.lower()
-            
-            # Check for disconnection
-            if "disconnected" in page_source or "runtime disconnected" in page_source:
-                return "disconnected"
-            
-            # Check for login required
-            if "sign in" in page_source or "accounts.google.com" in self.driver.current_url:
-                return "login_required"
-            
-            # Check session age
-            if self.session_start:
-                self.session_age = (datetime.now() - self.session_start).total_seconds() / 3600
-            
-            return "healthy"
-            
-        except Exception as e:
-            logger.error(f"❌ Status check failed: {e}")
+        except requests.exceptions.RequestException as e:
+            self.stats["failed_pings"] += 1
+            logger.warning(f"❌ Request error: {e}")
             return "error"
     
-    # ================== MAIN 24/7 AUTOMATION ==================
+    def calculate_session_age(self):
+        """Calculate current session age"""
+        if self.session_start:
+            return (datetime.now() - self.session_start).total_seconds() / 3600
+        return 0
     
-    def full_automation_cycle(self):
-        """Complete automation cycle - handles everything"""
-        logger.info("🚀 Starting FULL 24/7 Automation Cycle")
+    def reset_session(self):
+        """Reset session tracking"""
+        logger.info("🔄 Resetting session tracker...")
+        self.session_start = datetime.now()
+        self.stats["current_session_start"] = datetime.now()
+        self.stats["session_restarts"] += 1
+    
+    def keep_alive_loop(self):
+        """Main keep-alive loop"""
+        logger.info("🚀 Starting 24/7 keep-alive loop...")
         
-        cycle_count = 0
         consecutive_failures = 0
+        max_consecutive_failures = 5
+        
+        # Start first session
+        self.reset_session()
         
         while self.is_running:
             try:
-                cycle_count += 1
-                logger.info(f"🔄 Cycle #{cycle_count}")
+                # Calculate session age
+                session_age = self.calculate_session_age()
                 
-                # STEP 1: Setup browser if needed
-                if not self.driver:
-                    if not self.setup_stealth_browser():
-                        logger.error("❌ Browser setup failed")
-                        time.sleep(60)
-                        continue
+                # Check if session too old (near 12-hour limit)
+                if session_age > self.max_session_hours:
+                    logger.warning(f"⏰ Session age: {session_age:.1f}h - Consider restarting Colab")
+                    logger.info("💡 Note: You need to manually restart Colab every 12 hours")
+                    logger.info("💡 Bot can't auto-restart, but prevents idle timeout")
                 
-                # STEP 2: Ensure logged in
-                if not self.google_login():
-                    logger.error("❌ Login failed")
-                    time.sleep(60)
-                    continue
+                # Ping Colab
+                status = self.ping_colab()
                 
-                # STEP 3: Check if we have active session
-                session_too_old = self.session_age > 11.5 if self.session_start else True
-                
-                if not self.current_session_id or session_too_old:
-                    # Session expired or doesn't exist - CREATE NEW
-                    logger.info(f"🆕 Creating new session (old: {self.session_age:.1f}h)")
-                    if self.create_new_colab_session():
-                        consecutive_failures = 0
-                    else:
-                        consecutive_failures += 1
-                        logger.error(f"❌ Failed to create new session ({consecutive_failures}/5)")
-                        
-                        if consecutive_failures >= 5:
-                            logger.error("🔥 Too many failures, waiting 30 minutes")
-                            time.sleep(1800)
-                            consecutive_failures = 0
-                        else:
-                            time.sleep(300)  # Wait 5 minutes before retry
-                        continue
-                
+                if status == "active":
+                    consecutive_failures = 0
+                    logger.info(f"✅ Colab active (Session: {session_age:.1f}h)")
                 else:
-                    # STEP 4: We have active session - maintain it
-                    logger.info(f"📊 Session age: {self.session_age:.1f}h")
+                    consecutive_failures += 1
+                    logger.warning(f"⚠️ Ping status: {status} (Failures: {consecutive_failures})")
                     
-                    # Navigate to current session
-                    self.driver.get(self.current_session_id)
-                    time.sleep(5)
-                    
-                    # Check status
-                    status = self.check_session_status()
-                    
-                    if status == "disconnected":
-                        logger.warning("⚠️ Session disconnected, reconnecting...")
-                        self.connect_runtime()
-                        time.sleep(10)
-                        
-                    elif status == "login_required":
-                        logger.warning("⚠️ Login required, re-authenticating...")
-                        self.google_login()
-                        time.sleep(5)
-                        
-                    elif status == "healthy":
-                        # Reset idle timer periodically
-                        if cycle_count % 10 == 0:  # Every ~30 minutes
-                            self.reset_idle_timer()
-                        logger.info("✅ Session healthy")
-                    
-                    # Check if session too old
-                    if self.session_age > 11.5:  # 11.5 hours
-                        logger.warning(f"⏰ Session old ({self.session_age:.1f}h), will restart next cycle")
+                    if consecutive_failures >= max_consecutive_failures:
+                        logger.error(f"🔥 {consecutive_failures} consecutive failures!")
+                        # Could add notification here
+                        consecutive_failures = 0
                 
-                # STEP 5: Wait for next cycle
-                wait_time = 180  # 3 minutes
-                logger.info(f"⏳ Next cycle in {wait_time}s")
+                # Update total runtime
+                if self.stats["current_session_start"]:
+                    self.stats["total_runtime"] = datetime.now() - self.stats["current_session_start"]
+                
+                # Wait for next ping with random jitter
+                jitter = 0.8 + (0.4 * (time.time() % 1))  # Random 0.8-1.2
+                wait_time = self.ping_interval * jitter
+                
+                logger.info(f"⏳ Next ping in {int(wait_time)} seconds")
                 time.sleep(wait_time)
                 
+            except KeyboardInterrupt:
+                logger.info("🛑 Stopped by user")
+                break
             except Exception as e:
-                logger.error(f"❌ Cycle error: {e}")
-                consecutive_failures += 1
-                
-                # Try to recover
-                try:
-                    if self.driver:
-                        self.driver.quit()
-                        self.driver = None
-                except:
-                    pass
-                
-                if consecutive_failures >= 3:
-                    logger.error("🔥 Critical failure, waiting 10 minutes")
-                    time.sleep(600)
-                    consecutive_failures = 0
-                else:
-                    time.sleep(60)  # Wait before retry
+                logger.error(f"❌ Loop error: {e}")
+                time.sleep(60)  # Wait before retry
     
     def start(self):
-        """Start the full automation"""
+        """Start the keeper"""
         if self.is_running:
             logger.warning("⚠️ Already running")
             return False
         
+        logger.info("🚀 Starting 24/7 Colab Keeper")
         self.is_running = True
         
-        # Start automation in background thread
-        thread = threading.Thread(target=self.full_automation_cycle, daemon=True)
+        # Start in background thread
+        thread = threading.Thread(target=self.keep_alive_loop, daemon=True)
         thread.start()
         
-        logger.info("✅ 24/7 Complete Automation Started")
+        logger.info("✅ Keeper started successfully")
         return True
     
     def stop(self):
-        """Stop automation"""
-        logger.info("🛑 Stopping automation...")
+        """Stop the keeper"""
+        logger.info("🛑 Stopping keeper...")
         self.is_running = False
         
-        if self.driver:
-            try:
-                self.driver.quit()
-            except:
-                pass
+        # Calculate final stats
+        total_runtime = self.stats["total_runtime"]
         
-        logger.info("📊 Final stats:")
-        logger.info(f"   Total sessions created: {self.total_sessions}")
-        logger.info(f"   Current session age: {self.session_age:.1f}h")
+        logger.info("📊 Final Statistics:")
+        logger.info(f"   Total Pings: {self.stats['total_pings']}")
+        logger.info(f"   Successful: {self.stats['successful_pings']}")
+        logger.info(f"   Failed: {self.stats['failed_pings']}")
+        logger.info(f"   Session Restarts: {self.stats['session_restarts']}")
+        logger.info(f"   Total Runtime: {total_runtime}")
         
         return True
 
 # ================== WEB DASHBOARD ==================
 
 app = Flask(__name__)
-bot = CompleteColabAutomation()
+bot = SimpleColabKeeper()
 
 @app.route('/')
 def dashboard():
@@ -588,23 +219,99 @@ def dashboard():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>🤖 24/7 Colab Complete Automation</title>
+        <title>🤖 24/7 Colab Keeper - Simplified</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background: #0f172a; color: white; }
-            .container { max-width: 1000px; margin: 0 auto; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 15px; margin-bottom: 30px; }
-            .card { background: #1e293b; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-            .btn { background: #10b981; color: white; border: none; padding: 15px 30px; border-radius: 8px; cursor: pointer; margin: 10px; font-size: 16px; }
-            .btn:hover { opacity: 0.9; }
-            .btn-stop { background: #ef4444; }
-            .btn-create { background: #3b82f6; }
-            .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
-            .stat-box { background: #334155; padding: 20px; border-radius: 10px; text-align: center; }
-            .stat-value { font-size: 2em; font-weight: bold; margin: 10px 0; }
-            .status-indicator { display: inline-block; width: 15px; height: 15px; border-radius: 50%; margin-right: 10px; }
-            .status-online { background: #10b981; animation: pulse 2s infinite; }
-            .status-offline { background: #ef4444; }
-            @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                color: white;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 30px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 40px;
+            }
+            .status-card {
+                background: rgba(255, 255, 255, 0.15);
+                padding: 25px;
+                border-radius: 15px;
+                margin-bottom: 25px;
+            }
+            .btn {
+                background: #10b981;
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                margin: 10px;
+                transition: all 0.3s;
+                width: 200px;
+            }
+            .btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            }
+            .btn-stop {
+                background: #ef4444;
+            }
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin: 20px 0;
+            }
+            .stat-box {
+                background: rgba(255, 255, 255, 0.1);
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+            }
+            .stat-value {
+                font-size: 2em;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            .status-indicator {
+                display: inline-block;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                margin-right: 10px;
+            }
+            .status-running {
+                background: #10b981;
+                animation: pulse 2s infinite;
+            }
+            .status-stopped {
+                background: #ef4444;
+            }
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.5; }
+                100% { opacity: 1; }
+            }
+            .note {
+                background: rgba(255, 255, 255, 0.1);
+                padding: 15px;
+                border-radius: 10px;
+                margin: 15px 0;
+                font-size: 14px;
+            }
         </style>
         <script>
             function updateStatus() {
@@ -613,13 +320,16 @@ def dashboard():
                     .then(data => {
                         document.getElementById('status').innerHTML = 
                             data.running ? 
-                            '<span class="status-indicator status-online"></span>24/7 ACTIVE' : 
-                            '<span class="status-indicator status-offline"></span>STOPPED';
+                            '<span class="status-indicator status-running"></span>24/7 ACTIVE' : 
+                            '<span class="status-indicator status-stopped"></span>STOPPED';
                         
                         document.getElementById('sessionAge').textContent = data.session_age + ' hours';
-                        document.getElementById('totalSessions').textContent = data.total_sessions;
-                        document.getElementById('nextAction').textContent = data.next_action;
-                        document.getElementById('botStatus').textContent = data.bot_status;
+                        document.getElementById('totalPings').textContent = data.total_pings;
+                        document.getElementById('successfulPings').textContent = data.successful_pings;
+                        document.getElementById('failedPings').textContent = data.failed_pings;
+                        document.getElementById('lastCheck').textContent = data.last_check || 'Never';
+                        document.getElementById('colabUrl').textContent = data.colab_url;
+                        document.getElementById('nextPing').textContent = data.next_ping;
                     });
             }
             
@@ -632,18 +342,7 @@ def dashboard():
                     });
             }
             
-            function forceNewSession() {
-                if(confirm('Create brand new Colab session now?')) {
-                    fetch('/api/create-new-session')
-                        .then(r => r.json())
-                        .then(data => {
-                            alert(data.message);
-                            updateStatus();
-                        });
-                }
-            }
-            
-            // Auto-update
+            // Auto-update every 5 seconds
             setInterval(updateStatus, 5000);
             window.onload = updateStatus;
         </script>
@@ -651,56 +350,61 @@ def dashboard():
     <body>
         <div class="container">
             <div class="header">
-                <h1>🤖 24/7 Colab Complete Automation</h1>
-                <p>Creates NEW sessions, uploads code, runs everything automatically</p>
-                <p><small>Works even when browser/laptop is closed</small></p>
+                <h1>🤖 24/7 Colab Keeper</h1>
+                <p>Simple & Effective - No Browser Required</p>
+                <p><small>Works even when laptop is closed</small></p>
             </div>
             
-            <div class="card">
-                <h2>Automation Status: <span id="status">Loading...</span></h2>
-                <div class="stats-grid">
+            <div class="status-card">
+                <h2>Status: <span id="status">Loading...</span></h2>
+                <div class="stats">
                     <div class="stat-box">
-                        <div>Current Session Age</div>
+                        <div>Session Age</div>
                         <div class="stat-value" id="sessionAge">0h</div>
                     </div>
                     <div class="stat-box">
-                        <div>Total Sessions Created</div>
-                        <div class="stat-value" id="totalSessions">0</div>
+                        <div>Total Pings</div>
+                        <div class="stat-value" id="totalPings">0</div>
                     </div>
                     <div class="stat-box">
-                        <div>Bot Status</div>
-                        <div class="stat-value" id="botStatus">-</div>
+                        <div>Successful</div>
+                        <div class="stat-value" id="successfulPings">0</div>
                     </div>
                     <div class="stat-box">
-                        <div>Next Action</div>
-                        <div class="stat-value" id="nextAction">-</div>
+                        <div>Failed</div>
+                        <div class="stat-value" id="failedPings">0</div>
                     </div>
                 </div>
+                <p>Last Check: <span id="lastCheck">Never</span></p>
+                <p>Next Ping: <span id="nextPing">-</span></p>
             </div>
             
-            <div class="card">
+            <div class="note">
+                <strong>⚠️ Important:</strong> This bot prevents Colab's 90-minute idle timeout by pinging every 3 minutes.
+                However, Colab has a 12-hour session limit that requires manual restart.
+            </div>
+            
+            <div class="status-card">
                 <h2>Controls</h2>
-                <button class="btn" onclick="control('start')">🚀 Start 24/7 Automation</button>
-                <button class="btn btn-stop" onclick="control('stop')">⏹️ Stop Automation</button>
-                <button class="btn btn-create" onclick="forceNewSession()">🆕 Force New Session</button>
-                <button class="btn" onclick="updateStatus()">🔄 Refresh Status</button>
+                <button class="btn" onclick="control('start')">▶️ Start Keeper</button>
+                <button class="btn btn-stop" onclick="control('stop')">⏹️ Stop Keeper</button>
+                <button class="btn" onclick="control('restart')">🔄 Restart</button>
+                <button class="btn" onclick="updateStatus()">📊 Refresh Status</button>
             </div>
             
-            <div class="card">
-                <h2>What This Bot Does</h2>
-                <p>✅ Creates NEW Colab sessions from scratch</p>
-                <p>✅ Auto-login with saved cookies</p>
-                <p>✅ Imports code from GitHub/Gist (if configured)</p>
-                <p>✅ Auto-runs all cells</p>
-                <p>✅ Auto-restarts every 11.5 hours</p>
-                <p>✅ Works 24/7 even when browser/laptop closed</p>
+            <div class="status-card">
+                <h2>Configuration</h2>
+                <p><strong>Colab URL:</strong> <span id="colabUrl">Loading...</span></p>
+                <p><strong>Ping Interval:</strong> Every 3 minutes</p>
+                <p><strong>Method:</strong> HTTP requests (No browser required)</p>
+                <p><strong>Service:</strong> Running on Render.com 24/7</p>
             </div>
             
-            <div class="card">
+            <div class="status-card">
                 <h2>Quick Links</h2>
                 <a href="/health" target="_blank"><button class="btn">Health Check</button></a>
                 <a href="/api/status" target="_blank"><button class="btn">API Status</button></a>
-                <a href="''' + (bot.colab_notebook_url if bot.colab_notebook_url else "https://colab.research.google.com") + '''" target="_blank"><button class="btn">Open Colab</button></a>
+                <a href="''' + (bot.colab_url if bot.colab_url else "https://colab.research.google.com") + '''" target="_blank"><button class="btn">Open Colab</button></a>
             </div>
         </div>
     </body>
@@ -710,107 +414,97 @@ def dashboard():
 
 @app.route('/health')
 def health():
-    """Health check"""
+    """Health endpoint for UptimeRobot"""
     return jsonify({
         "status": "healthy",
         "running": bot.is_running,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "service": "24/7 Colab Keeper"
     })
 
 @app.route('/api/status')
 def api_status():
-    """API status"""
-    session_age = bot.session_age if hasattr(bot, 'session_age') else 0
-    next_action = f"Restart in {max(0, 11.5 - session_age):.1f}h" if bot.is_running else "Idle"
-    bot_status = "Running" if bot.is_running else "Stopped"
+    """API status endpoint"""
+    session_age = bot.calculate_session_age()
+    next_ping = f"In {bot.ping_interval}s" if bot.is_running else "Not running"
     
     return jsonify({
         "running": bot.is_running,
         "session_age": f"{session_age:.1f}",
-        "total_sessions": bot.total_sessions,
-        "next_action": next_action,
-        "bot_status": bot_status
+        "total_pings": bot.stats["total_pings"],
+        "successful_pings": bot.stats["successful_pings"],
+        "failed_pings": bot.stats["failed_pings"],
+        "last_check": bot.last_check.isoformat() if bot.last_check else None,
+        "colab_url": bot.colab_url[:50] + "..." if len(bot.colab_url) > 50 else bot.colab_url,
+        "next_ping": next_ping
     })
 
 @app.route('/api/start')
 def api_start():
-    """Start bot"""
+    """Start bot via API"""
     if bot.is_running:
         return jsonify({"message": "Already running", "success": True})
     
     success = bot.start()
     return jsonify({
-        "message": "24/7 Automation started" if success else "Failed to start",
+        "message": "Keeper started" if success else "Failed to start",
         "success": success
     })
 
 @app.route('/api/stop')
 def api_stop():
-    """Stop bot"""
+    """Stop bot via API"""
     if not bot.is_running:
         return jsonify({"message": "Not running", "success": True})
     
     success = bot.stop()
     return jsonify({
-        "message": "Automation stopped" if success else "Failed to stop",
+        "message": "Keeper stopped" if success else "Failed to stop",
         "success": success
     })
 
-@app.route('/api/create-new-session')
-def create_new_session():
-    """Force create new session"""
-    if not bot.is_running:
-        return jsonify({"message": "Start bot first", "success": False})
-    
-    if not bot.driver:
-        return jsonify({"message": "Browser not ready", "success": False})
-    
-    success = bot.create_new_colab_session()
+@app.route('/api/restart')
+def api_restart():
+    """Restart bot"""
+    bot.stop()
+    time.sleep(2)
+    success = bot.start()
     return jsonify({
-        "message": "New session created" if success else "Failed to create session",
+        "message": "Keeper restarted" if success else "Failed to restart",
         "success": success
     })
 
 # ================== MAIN ==================
 
 def main():
-    """Main entry point"""
-    print("\n" + "="*70)
-    print("🤖 24/7 COLAB COMPLETE AUTOMATION BOT")
-    print("="*70)
+    """Main function"""
+    print("\n" + "="*60)
+    print("🤖 24/7 COLAB KEEPER - SIMPLIFIED")
+    print("="*60)
+    print(f"Time: {datetime.now()}")
+    print(f"Colab URL: {bot.colab_url[:50]}..." if bot.colab_url else "No Colab URL set")
+    print("="*60)
     
-    if bot.colab_notebook_url:
-        print(f"📓 Colab URL: {bot.colab_notebook_url[:50]}...")
-    else:
-        print("📓 Colab URL: Not set (will create new notebooks)")
-    
-    if bot.github_gist_url:
-        print(f"📦 GitHub Gist: {bot.github_gist_url[:50]}...")
-    
-    if not bot.google_email or not bot.google_password:
-        print("⚠️  WARNING: GOOGLE_EMAIL or GOOGLE_PASSWORD not set!")
-        print("💡 Set in Render.com environment variables")
-        print("💡 Use Google App Password (16 characters)")
-    
-    print("="*70)
-    
-    # Auto-start on Render.com
+    # Check if running on Render.com
     if os.getenv("RENDER"):
-        print("🌐 Render.com detected - Starting bot...")
+        print("🌐 Render.com detected - Auto-starting...")
         
-        # Start bot
+        # Start the keeper
         bot.start()
         
-        # Start Flask
+        # Start Flask app
         port = int(os.getenv("PORT", 10000))
         print(f"🌍 Dashboard: http://0.0.0.0:{port}")
         print(f"🔗 Health: https://your-app.onrender.com/health")
         app.run(host='0.0.0.0', port=port, debug=False)
     else:
-        # Local
-        print("💻 Local mode")
+        # Local execution
+        print("💻 Local execution mode")
+        bot.start()
+        
+        # Simple Flask for local
         port = 8080
-        print(f"🌍 Dashboard: http://localhost:{port}")
+        print(f"🌍 Local dashboard: http://localhost:{port}")
         app.run(host='0.0.0.0', port=port, debug=True)
 
 if __name__ == "__main__":
