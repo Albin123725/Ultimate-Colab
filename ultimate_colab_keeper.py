@@ -13,7 +13,6 @@ import time
 import json
 import logging
 import threading
-import subprocess
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template_string
 import requests
@@ -23,7 +22,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-import undetected_chromedriver as uc
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -62,7 +60,7 @@ class CompleteColabAutomation:
     def setup_stealth_browser(self):
         """Setup undetectable browser"""
         try:
-            options = uc.ChromeOptions()
+            options = webdriver.ChromeOptions()
             
             # Headless for Render.com
             options.add_argument("--headless=new")
@@ -72,9 +70,27 @@ class CompleteColabAutomation:
             
             # Anti-detection
             options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option("useAutomationExtension", False)
+            
+            # Try different Chrome paths
+            chrome_paths = [
+                "/usr/bin/google-chrome",
+                "/usr/bin/chromium-browser",
+                "/usr/local/bin/chromedriver",
+                "/opt/google/chrome/chrome"
+            ]
+            
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    options.binary_location = path
+                    break
             
             # Create driver
-            self.driver = uc.Chrome(options=options)
+            self.driver = webdriver.Chrome(options=options)
+            
+            # Anti-detection script
+            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             
             logger.info("✅ Stealth browser ready")
             return True
@@ -181,7 +197,8 @@ class CompleteColabAutomation:
                 time.sleep(5)
                 
                 # Check if we need to copy it
-                if "copy" in self.driver.page_source.lower():
+                page_text = self.driver.page_source.lower()
+                if "copy" in page_text or "save" in page_text:
                     self.copy_notebook_to_drive()
                 else:
                     # Already in our drive, just open
@@ -202,7 +219,7 @@ class CompleteColabAutomation:
             
             # Connect to runtime
             if not self.connect_runtime():
-                logger.warning("⚠️ Could not connect runtime, might need manual intervention")
+                logger.warning("⚠️ Could not connect runtime, will try again later")
             
             # Run all cells
             self.run_all_cells()
@@ -226,20 +243,17 @@ class CompleteColabAutomation:
             copy_buttons = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Copy to Drive') or contains(text(), 'Save a copy')]")
             
             for button in copy_buttons:
-                if button.is_displayed():
-                    button.click()
-                    logger.info("✅ Clicked 'Copy to Drive'")
-                    time.sleep(5)
-                    return True
+                try:
+                    if button.is_displayed():
+                        button.click()
+                        logger.info("✅ Clicked 'Copy to Drive'")
+                        time.sleep(5)
+                        return True
+                except:
+                    continue
             
-            # If no copy button, try File → Save a copy in Drive
-            self.driver.find_element(By.XPATH, "//div[text()='File']").click()
-            time.sleep(1)
-            self.driver.find_element(By.XPATH, "//div[text()='Save a copy in Drive']").click()
-            time.sleep(5)
-            
-            logger.info("✅ Saved copy in Drive")
-            return True
+            logger.warning("Could not find copy button")
+            return False
             
         except Exception as e:
             logger.warning(f"Could not copy to drive: {e}")
@@ -249,9 +263,16 @@ class CompleteColabAutomation:
         """Import code from GitHub Gist"""
         try:
             # Click File → Open notebook
-            self.driver.find_element(By.XPATH, "//div[text()='File']").click()
+            file_menu = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'File')]"))
+            )
+            file_menu.click()
             time.sleep(1)
-            self.driver.find_element(By.XPATH, "//div[text()='Open notebook']").click()
+            
+            open_option = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Open notebook')]"))
+            )
+            open_option.click()
             time.sleep(2)
             
             # Switch to GitHub tab
@@ -265,12 +286,6 @@ class CompleteColabAutomation:
             url_field.send_keys(Keys.RETURN)
             time.sleep(5)
             
-            # Click on the notebook
-            notebook_items = self.driver.find_elements(By.XPATH, "//div[@role='listitem']")
-            if notebook_items:
-                notebook_items[0].click()
-                time.sleep(5)
-            
             logger.info(f"✅ Imported from Gist: {self.github_gist_url}")
             return True
             
@@ -281,9 +296,16 @@ class CompleteColabAutomation:
     def create_default_notebook(self):
         """Create a default notebook with cells"""
         try:
+            # Wait for page to load
+            time.sleep(5)
+            
             # Add a code cell
-            self.driver.find_element(By.XPATH, "//div[text()='+ Code']").click()
-            time.sleep(2)
+            try:
+                add_code_btn = self.driver.find_element(By.XPATH, "//div[contains(text(), '+ Code')]")
+                add_code_btn.click()
+                time.sleep(2)
+            except:
+                pass
             
             # Add some default code
             code_cells = self.driver.find_elements(By.TAG_NAME, "textarea")
@@ -298,18 +320,18 @@ from IPython.display import display, Javascript
 print("✅ Colab 24/7 Bot - Session Active")
 
 # Keep-alive function
-def keep_colab_alive():
-    display(Javascript('''
-        function clickConnect() {
-            console.log("Colab Keep-Alive: " + new Date().toLocaleTimeString());
-            if (document.querySelector("colab-connect-button")) {
-                document.querySelector("colab-connect-button").click();
-            }
-        }
-        setInterval(clickConnect, 60000);
-    '''))
+keep_alive_js = """
+function clickConnect() {
+    console.log("Colab Keep-Alive: " + new Date().toLocaleTimeString());
+    var connectBtn = document.querySelector("colab-connect-button");
+    if (connectBtn) {
+        connectBtn.click();
+    }
+}
+setInterval(clickConnect, 60000);
+"""
 
-keep_colab_alive()
+display(Javascript(keep_alive_js))
 print("🤖 Keep-alive script activated")'''
                 
                 code_cell.send_keys(default_code)
@@ -339,15 +361,19 @@ print("🤖 Keep-alive script activated")'''
                 try:
                     buttons = self.driver.find_elements(By.XPATH, selector)
                     for button in buttons:
-                        if button.is_displayed():
-                            button.click()
-                            logger.info(f"✅ Clicked Connect: {selector}")
-                            time.sleep(10)  # Wait for runtime
-                            return True
+                        try:
+                            if button.is_displayed():
+                                button.click()
+                                logger.info(f"✅ Clicked Connect: {selector}")
+                                time.sleep(10)  # Wait for runtime
+                                return True
+                        except:
+                            continue
                 except:
                     continue
             
             # If no connect button, runtime might already be connected
+            logger.info("⚠️ No connect button found - might already be connected")
             return True
             
         except Exception as e:
@@ -359,11 +385,11 @@ print("🤖 Keep-alive script activated")'''
         try:
             # Method 1: Runtime menu → Run all
             try:
-                runtime_menu = self.driver.find_element(By.XPATH, "//div[text()='Runtime']")
+                runtime_menu = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Runtime')]")
                 runtime_menu.click()
                 time.sleep(1)
                 
-                run_all_option = self.driver.find_element(By.XPATH, "//div[text()='Run all']")
+                run_all_option = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Run all')]")
                 run_all_option.click()
                 logger.info("✅ Clicked Runtime → Run all")
                 time.sleep(5)
@@ -423,6 +449,7 @@ print("🤖 Keep-alive script activated")'''
         logger.info("🚀 Starting FULL 24/7 Automation Cycle")
         
         cycle_count = 0
+        consecutive_failures = 0
         
         while self.is_running:
             try:
@@ -443,12 +470,23 @@ print("🤖 Keep-alive script activated")'''
                     continue
                 
                 # STEP 3: Check if we have active session
-                if not self.current_session_id or self.session_age > 11.5:
+                session_too_old = self.session_age > 11.5 if self.session_start else True
+                
+                if not self.current_session_id or session_too_old:
                     # Session expired or doesn't exist - CREATE NEW
-                    logger.info("🆕 Creating new session (old session expired or doesn't exist)")
-                    if not self.create_new_colab_session():
-                        logger.error("❌ Failed to create new session")
-                        time.sleep(300)  # Wait 5 minutes before retry
+                    logger.info(f"🆕 Creating new session (old: {self.session_age:.1f}h)")
+                    if self.create_new_colab_session():
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
+                        logger.error(f"❌ Failed to create new session ({consecutive_failures}/5)")
+                        
+                        if consecutive_failures >= 5:
+                            logger.error("🔥 Too many failures, waiting 30 minutes")
+                            time.sleep(1800)
+                            consecutive_failures = 0
+                        else:
+                            time.sleep(300)  # Wait 5 minutes before retry
                         continue
                 
                 else:
@@ -489,6 +527,7 @@ print("🤖 Keep-alive script activated")'''
                 
             except Exception as e:
                 logger.error(f"❌ Cycle error: {e}")
+                consecutive_failures += 1
                 
                 # Try to recover
                 try:
@@ -498,7 +537,12 @@ print("🤖 Keep-alive script activated")'''
                 except:
                     pass
                 
-                time.sleep(60)  # Wait before retry
+                if consecutive_failures >= 3:
+                    logger.error("🔥 Critical failure, waiting 10 minutes")
+                    time.sleep(600)
+                    consecutive_failures = 0
+                else:
+                    time.sleep(60)  # Wait before retry
     
     def start(self):
         """Start the full automation"""
@@ -561,7 +605,6 @@ def dashboard():
             .status-online { background: #10b981; animation: pulse 2s infinite; }
             .status-offline { background: #ef4444; }
             @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-            .log { background: #1e293b; padding: 15px; border-radius: 8px; margin: 10px 0; font-family: monospace; overflow: auto; max-height: 200px; }
         </style>
         <script>
             function updateStatus() {
@@ -575,8 +618,8 @@ def dashboard():
                         
                         document.getElementById('sessionAge').textContent = data.session_age + ' hours';
                         document.getElementById('totalSessions').textContent = data.total_sessions;
-                        document.getElementById('mode').textContent = data.mode;
                         document.getElementById('nextAction').textContent = data.next_action;
+                        document.getElementById('botStatus').textContent = data.bot_status;
                     });
             }
             
@@ -625,8 +668,8 @@ def dashboard():
                         <div class="stat-value" id="totalSessions">0</div>
                     </div>
                     <div class="stat-box">
-                        <div>Current Mode</div>
-                        <div class="stat-value" id="mode">-</div>
+                        <div>Bot Status</div>
+                        <div class="stat-value" id="botStatus">-</div>
                     </div>
                     <div class="stat-box">
                         <div>Next Action</div>
@@ -640,7 +683,7 @@ def dashboard():
                 <button class="btn" onclick="control('start')">🚀 Start 24/7 Automation</button>
                 <button class="btn btn-stop" onclick="control('stop')">⏹️ Stop Automation</button>
                 <button class="btn btn-create" onclick="forceNewSession()">🆕 Force New Session</button>
-                <button class="btn" onclick="control('restart')">🔄 Restart Bot</button>
+                <button class="btn" onclick="updateStatus()">🔄 Refresh Status</button>
             </div>
             
             <div class="card">
@@ -654,18 +697,16 @@ def dashboard():
             </div>
             
             <div class="card">
-                <h2>Configuration</h2>
-                <p><strong>Colab URL:</strong> {{ colab_url[:50] }}...</p>
-                <p><strong>GitHub Gist:</strong> {{ gist_url if gist_url else 'Not set' }}</p>
-                <p><strong>Check Interval:</strong> Every 3 minutes</p>
+                <h2>Quick Links</h2>
+                <a href="/health" target="_blank"><button class="btn">Health Check</button></a>
+                <a href="/api/status" target="_blank"><button class="btn">API Status</button></a>
+                <a href="''' + (bot.colab_notebook_url if bot.colab_notebook_url else "https://colab.research.google.com") + '''" target="_blank"><button class="btn">Open Colab</button></a>
             </div>
         </div>
     </body>
     </html>
     '''
-    return render_template_string(html, 
-                                 colab_url=bot.colab_notebook_url,
-                                 gist_url=bot.github_gist_url)
+    return html
 
 @app.route('/health')
 def health():
@@ -681,13 +722,14 @@ def api_status():
     """API status"""
     session_age = bot.session_age if hasattr(bot, 'session_age') else 0
     next_action = f"Restart in {max(0, 11.5 - session_age):.1f}h" if bot.is_running else "Idle"
+    bot_status = "Running" if bot.is_running else "Stopped"
     
     return jsonify({
         "running": bot.is_running,
         "session_age": f"{session_age:.1f}",
         "total_sessions": bot.total_sessions,
-        "mode": bot.mode,
-        "next_action": next_action
+        "next_action": next_action,
+        "bot_status": bot_status
     })
 
 @app.route('/api/start')
@@ -717,8 +759,11 @@ def api_stop():
 @app.route('/api/create-new-session')
 def create_new_session():
     """Force create new session"""
-    if not bot.driver:
+    if not bot.is_running:
         return jsonify({"message": "Start bot first", "success": False})
+    
+    if not bot.driver:
+        return jsonify({"message": "Browser not ready", "success": False})
     
     success = bot.create_new_colab_session()
     return jsonify({
@@ -733,28 +778,40 @@ def main():
     print("\n" + "="*70)
     print("🤖 24/7 COLAB COMPLETE AUTOMATION BOT")
     print("="*70)
-    print(f"Colab URL: {bot.colab_notebook_url[:50]}..." if bot.colab_notebook_url else "No Colab URL set")
-    print(f"GitHub Gist: {bot.github_gist_url[:50]}..." if bot.github_gist_url else "No Gist URL set")
-    print("="*70)
     
-    # Check for required environment
+    if bot.colab_notebook_url:
+        print(f"📓 Colab URL: {bot.colab_notebook_url[:50]}...")
+    else:
+        print("📓 Colab URL: Not set (will create new notebooks)")
+    
+    if bot.github_gist_url:
+        print(f"📦 GitHub Gist: {bot.github_gist_url[:50]}...")
+    
     if not bot.google_email or not bot.google_password:
-        print("⚠️  WARNING: GOOGLE_EMAIL and GOOGLE_PASSWORD not set")
-        print("💡 Set these in Render.com environment variables")
+        print("⚠️  WARNING: GOOGLE_EMAIL or GOOGLE_PASSWORD not set!")
+        print("💡 Set in Render.com environment variables")
         print("💡 Use Google App Password (16 characters)")
+    
+    print("="*70)
     
     # Auto-start on Render.com
     if os.getenv("RENDER"):
         print("🌐 Render.com detected - Starting bot...")
+        
+        # Start bot
         bot.start()
         
+        # Start Flask
         port = int(os.getenv("PORT", 10000))
         print(f"🌍 Dashboard: http://0.0.0.0:{port}")
+        print(f"🔗 Health: https://your-app.onrender.com/health")
         app.run(host='0.0.0.0', port=port, debug=False)
     else:
         # Local
-        print("💻 Local mode - Manual start required")
-        app.run(host='0.0.0.0', port=8080, debug=True)
+        print("💻 Local mode")
+        port = 8080
+        print(f"🌍 Dashboard: http://localhost:{port}")
+        app.run(host='0.0.0.0', port=port, debug=True)
 
 if __name__ == "__main__":
     main()
